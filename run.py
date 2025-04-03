@@ -1,6 +1,9 @@
+import os
+
 import gymnasium as gym
 import numpy as np
 from keras.layers import Dense, Conv2D
+from keras.saving.save import load_model
 from tensorflow.keras import Model, layers, optimizers
 from collections import deque
 from minigrid.wrappers import ImgObsWrapper
@@ -9,12 +12,12 @@ import tensorflow as tf
 # Hyperparamètres
 epsilon = 1
 epsilon_min = 0.01
-epsilon_decay = 0.75
+epsilon_decay = 0.995
 gamma = 0.99
 batch_size = 64
 memory_size = 100000
-episodes = 300
-learning_rate = 1e-3
+episodes = 500
+learning_rate = 1e-6
 
 # Configuration environnement
 env = gym.make('MiniGrid-Empty-5x5-v0', render_mode='human')
@@ -34,21 +37,24 @@ def create_q_model():
     outputs = Dense(action_shape)(x)
 
     model = Model(inputs, outputs)
-    model.load_weights('minigrid_model.weights.h5')
     model.compile(optimizer=optimizers.Adam(learning_rate=learning_rate),
                   loss='huber')
     return model
 
-# Initialisation des modèles
-q_model = create_q_model()
-target_model = create_q_model()
-target_model.set_weights(q_model.get_weights())
+if os.path.exists('q_model.h5'):
+    print("Les modèles existent déjà, chargement des poids...")
+    q_model = load_model('q_model.h5')
+    target_model = load_model('q_model.h5')
+else:
+    q_model = create_q_model()
+    target_model = create_q_model()
+    target_model.set_weights(q_model.get_weights())
 
 memory = deque(maxlen=memory_size)
 
 
 def preprocess_state(state):
-    return state.astype(np.float32) / 10.0
+    return state.astype(np.float32) / 255.0
 
 
 def store_experience(state, action, reward, next_state, done):
@@ -90,16 +96,34 @@ def train_step():
 
 
 # Boucle d'entraînement
+# Boucle d'entraînement
 for episode in range(episodes):
     obs, _ = env.reset()
     state = obs
     total_reward = 0
     done = False
+    previous_pos = None
+    same_pos_count = 0
+    max_same_pos_count = 5  # Nombre maximum de fois que l'agent peut rester sur la même case
 
     while not done:
         action = epsilon_greedy_action(state)
         next_obs, reward, terminated, truncated, _ = env.step(action)
         done = terminated or truncated
+
+        # Accéder à l'environnement sous-jacent pour obtenir la position de l'agent
+        current_pos = env.unwrapped.agent_pos
+        if current_pos == previous_pos:
+            same_pos_count += 1
+            if same_pos_count >= max_same_pos_count:
+                reward -= 5  # Pénalité pour rester sur la même case
+        else:
+            same_pos_count = 0
+
+        previous_pos = current_pos
+
+        if done and terminated:
+            reward += 100
 
         store_experience(state, action, reward, next_obs, done)
         loss = train_step()
@@ -111,6 +135,11 @@ for episode in range(episodes):
 
     if episode % 10 == 0:
         target_model.set_weights(q_model.get_weights())
-        # target_model.save_weights('minigrid_model.weights.h5')
+        target_model.save('q_model.h5')
+
+    if episode % 50 == 0:
+        env.render()
 
     print(f"Episode: {episode:4d} | Reward: {total_reward:4.1f} | Epsilon: {epsilon:4.2f}")
+
+env.close()
