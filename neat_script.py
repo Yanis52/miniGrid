@@ -1,6 +1,5 @@
 import os
 import pickle
-
 import gymnasium as gym
 import numpy as np
 import neat
@@ -13,10 +12,6 @@ from neat.reporting import StdOutReporter
 from configparser import ConfigParser
 import minigrid
 from minigrid.core.mission import MissionSpace
-
-# Configuration de l'environnement
-env = gym.make('MiniGrid-Empty-5x5-v0', render_mode='rgb_array')
-env.reset()
 
 # Chargement de la configuration
 config = Config(
@@ -56,6 +51,9 @@ actions = {
     6: 'done'  # Terminer l'épisode
 }
 
+# Initialisation corrigée de l'environnement
+env = gym.make('MiniGrid-Empty-Random-6x6-v0', render_mode='human')
+env = env.unwrapped
 
 # Préprocessing des observations
 def preprocess_obs(obs):
@@ -70,9 +68,6 @@ def preprocess_obs(obs):
 
     return np.concatenate([img_flat, direction_oh])
 
-# Initialisation corrigée de l'environnement
-env = gym.make('MiniGrid-Empty-Random-6x6-v0', render_mode='human')
-env = env.unwrapped
 
 
 # Évaluation des génomes
@@ -86,7 +81,7 @@ def eval_genomes(genomes, config):
             episode_reward = 0
             previous_pos = None
 
-            for step in range(50):  # Limite de pas réduite
+            for step in range(50):
                 inputs = preprocess_obs(obs)
                 action = np.argmax(net.activate(inputs))
 
@@ -99,8 +94,10 @@ def eval_genomes(genomes, config):
                     previous_pos = current_pos
 
                 if done:
-                    episode_reward += 10  # Bonus pour réussite
+                    episode_reward += 15  # Bonus pour réussite
                     break
+                else:
+                    episode_reward -= 5
 
             total_reward += episode_reward
 
@@ -116,7 +113,7 @@ def run_neat():
     stats = neat.StatisticsReporter()
     population.add_reporter(stats)
 
-    winner = population.run(eval_genomes, 300)
+    winner = population.run(eval_genomes, 200)
     with open('winner.pkl', 'wb') as f:
         pickle.dump(winner, f)
 
