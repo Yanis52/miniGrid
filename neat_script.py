@@ -1,3 +1,4 @@
+import os
 import pickle
 
 import gymnasium as gym
@@ -70,7 +71,7 @@ def preprocess_obs(obs):
     return np.concatenate([img_flat, direction_oh])
 
 # Initialisation corrigée de l'environnement
-env = gym.make('MiniGrid-Empty-8x8-v0', render_mode='rgb_array')
+env = gym.make('MiniGrid-Empty-Random-6x6-v0', render_mode='human')
 env = env.unwrapped
 
 
@@ -115,7 +116,9 @@ def run_neat():
     stats = neat.StatisticsReporter()
     population.add_reporter(stats)
 
-    winner = population.run(eval_genomes, 100)
+    winner = population.run(eval_genomes, 300)
+    with open('winner.pkl', 'wb') as f:
+        pickle.dump(winner, f)
 
     return winner
 
@@ -136,5 +139,12 @@ def visualize_best_agent(genome, config):
 
 
 if __name__ == "__main__":
-    best_genome = run_neat()
-    visualize_best_agent(best_genome, config)
+    if os.path.exists('winner.pkl'):
+        with open('winner.pkl', 'rb') as f:
+            best_genome = pickle.load(f)
+
+        genomes = [(0, best_genome)]
+        eval_genomes(genomes, config)
+    else:
+        best_genome = run_neat()
+        visualize_best_agent(best_genome, config)
